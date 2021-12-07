@@ -1,0 +1,1915 @@
+---
+title: "Crime Prediction"
+author: "Jeyaraman Ramalingam"
+date: "12/6/2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+    toc_float: yes
+    theme: journal
+---
+
+## Libraries
+```{r,eval=TRUE, message=FALSE,warning=FALSE, echo=F}
+library(tidyverse)
+library(caret)
+library(pROC)
+library(knitr)
+library(Amelia)
+library(naniar)
+library(reshape2)
+library(stats)
+library(corrplot)
+library(e1071)
+library(jtools)
+library(performance)
+library(rJava)
+library(glmulti)
+library(cvms)
+library(ROCR)
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(randomForest)
+library(skimr)
+library("PerformanceAnalytics")
+library(caret)
+library(dplyr)
+library(gdata)
+library(tidyverse)
+library(Amelia)
+library(mice)
+library(kableExtra)
+library(data.table)
+library(e1071)
+library(corrplot)
+library(MASS)
+library(caret)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(maps)
+library("Hmisc")
+library(kableExtra)
+library(stringr)
+library(ROCR)
+library(DMwR2)
+library(class)
+library(ggplot2)
+library(MLmetrics)
+library(xgboost)
+```
+
+## Data Sources
+```{r,eval=TRUE, message=FALSE,warning=FALSE, echo=F}
+
+df_atlanta <- read.csv(file = 'datasets/Atlanta.csv')
+df_atlanta <- df_atlanta[,c('Report.Number','Beat','Report.Date','UCR.Literal','Longitude','Latitude')]
+df_atlanta <- df_atlanta[1:5000,]
+
+factors <- factor(df_atlanta$UCR.Literal)
+df_atlanta$OffenseCode <- as.numeric(factors)
+df_atlanta<-within(df_atlanta,rm(UCR.Literal))
+
+
+date = strptime(df_atlanta$Report.Date,"%Y-%m-%d")
+df_atlanta["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_atlanta["Month"] <- as.numeric(paste(format(date,"%m")))
+df_atlanta["Day"] <-  as.numeric(format(date,"%d"))
+
+df_atlanta<-within(df_atlanta,rm(Report.Date))
+
+df_atlanta<-na.omit(df_atlanta)
+
+
+df_chicago <- read.csv(file = 'datasets/Chicago.csv')
+df_chicago <- df_chicago[,c('ï..ID','Case.Number','Date','Primary.Type','Longitude','Latitude')]
+df_chicago <- df_chicago[1:5000,]
+
+factors <- factor(df_chicago$Primary.Type)
+df_chicago$OffenseCode <- as.numeric(factors)
+df_chicago<-within(df_chicago,rm(Primary.Type))
+
+
+date = strptime(df_chicago$Date,"%m/%d/%Y %H:%M:%S")
+df_chicago["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_chicago["Month"] <- as.numeric(paste(format(date,"%m")))
+df_chicago["Day"] <-  as.numeric(format(date,"%d"))
+df_chicago["Hour"] <-  as.numeric(format(date,"%H"))
+df_chicago["HourC"] <-  as.numeric(format(date,"%H"))
+df_chicago["DayDec"] <-  as.numeric(substr(format(date,"%d"),1,1))
+
+df_chicago<-within(df_chicago,rm(Date))
+df_chicago<-within(df_chicago,rm(Case.Number))
+
+df_chicago<-na.omit(df_chicago)
+
+df_la <- read.csv(file = 'datasets/LA.csv')
+df_la <- df_la[,c('DR_NO','Date.Rptd','Crm.Cd.Desc','LON','LAT','AREA','Rpt.Dist.No')]
+df_la <- df_la[1:5000,]
+
+factors <- factor(df_la$Crm.Cd.Desc)
+df_la$OffenseCode <- as.numeric(factors)
+df_la<-within(df_la,rm(Crm.Cd.Desc))
+
+
+date = strptime(df_la$Date.Rptd,"%m/%d/%Y %H:%M:%S")
+df_la["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_la["Month"] <- as.numeric(paste(format(date,"%m")))
+df_la["Day"] <-  as.numeric(format(date,"%d"))
+df_la["Hour"] <-  as.numeric(format(date,"%H"))
+df_la["HourC"] <-  as.numeric(format(date,"%H"))
+df_la["DayDec"] <-  as.numeric(substr(format(date,"%d"),1,1))
+
+df_la<-within(df_la,rm(Date.Rptd))
+df_la<-within(df_la,rm(Year))
+df_la<-within(df_la,rm(Hour))
+df_la<-within(df_la,rm(HourC))
+
+df_la<-na.omit(df_la)
+df_ny <- read.csv(file = 'datasets/NY.csv')
+df_ny <- df_ny[,c('CMPLNT_NUM','RPT_DT','OFNS_DESC','Longitude','Latitude','PD_CD','ADDR_PCT_CD')]
+df_ny <- df_ny[1:5000,]
+
+factors <- factor(df_ny$OFNS_DESC)
+df_ny$OffenseCode <- as.numeric(factors)
+df_ny<-within(df_ny,rm(OFNS_DESC))
+
+
+date = strptime(df_ny$RPT_DT,"%m/%d/%Y")
+df_ny["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_ny["Month"] <- as.numeric(paste(format(date,"%m")))
+df_ny["Day"] <-  as.numeric(format(date,"%d"))
+df_ny["DayDec"] <-  as.numeric(substr(format(date,"%d"),1,1))
+
+df_ny<-within(df_ny,rm(RPT_DT))
+df_ny<-within(df_ny,rm(Year))
+
+
+df_ny<-na.omit(df_ny)
+
+
+df_sfo <- read.csv(file = 'datasets/SFO.csv')
+df_sfo <- df_sfo[,c('IncidntNum','Date','Category','Y','X','Incident.Code')]
+df_sfo <- df_sfo[1:5000,]
+
+factors <- factor(df_sfo$Category)
+df_sfo$OffenseCode <- as.numeric(factors)
+df_sfo<-within(df_sfo,rm(Category))
+
+
+date = strptime(df_sfo$Date,"%m/%d/%Y")
+df_sfo["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_sfo["Month"] <- as.numeric(paste(format(date,"%m")))
+df_sfo["Day"] <-  as.numeric(format(date,"%d"))
+df_sfo["Hour"] <-  as.numeric(format(date,"%H"))
+df_sfo["HourC"] <-  as.numeric(format(date,"%H"))
+df_sfo["DayDec"] <-  as.numeric(substr(format(date,"%d"),1,1))
+
+df_sfo<-within(df_sfo,rm(Date))
+df_sfo<-within(df_sfo,rm(Year))
+df_sfo<-within(df_sfo,rm(Hour))
+df_sfo<-within(df_sfo,rm(HourC))
+
+df_sfo<-na.omit(df_sfo)
+
+
+df_seattle <- read.csv(file = 'datasets/Seattle.csv')
+df_seattle <- df_seattle[,c('Offense.ID','Report.DateTime','Offense','Longitude','Latitude','Beat')]
+df_seattle <- df_seattle[1:5000,]
+
+factors <- factor(df_seattle$Offense)
+df_seattle$OffenseCode <- as.numeric(factors)
+df_seattle<-within(df_seattle,rm(Offense))
+
+
+date = strptime(df_seattle$Report.DateTime,"%m/%d/%Y %H:%M:%S")
+df_seattle["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_seattle["Month"] <- as.numeric(paste(format(date,"%m")))
+df_seattle["Day"] <-  as.numeric(format(date,"%d"))
+df_seattle["Hour"] <-  as.numeric(format(date,"%H"))
+df_seattle["HourC"] <-  as.numeric(format(date,"%H"))
+df_seattle["DayDec"] <-  as.numeric(substr(format(date,"%d"),1,1))
+
+df_seattle<-within(df_seattle,rm(Report.DateTime))
+df_seattle<-within(df_seattle,rm(Beat))
+
+names(df_atlanta)
+names(df_chicago)
+names(df_la)
+names(df_ny)
+names(df_sfo)
+names(df_seattle)
+
+head(df_atlanta)
+head(df_chicago)
+head(df_la)
+head(df_ny)
+head(df_sfo)
+head(df_seattle)
+
+
+```
+## Input Statistics - Atlanta
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+missmap(df_atlanta, main="Missing Values") 
+colSums(is.na(df_atlanta))
+
+#nonbinary <- c(1:10)
+#X <- df_atlanta
+
+#par(mfrow = c(3,4))
+#for (i in nonbinary) {
+#  hist(X[ ,i], xlab = names(X[i]), main = names(X[i]))
+#  d <- density(X[,i])
+#  plot(d, main = names(X[i]))
+#  polygon(d, col="red")
+#}
+
+
+# Density plot to check normality
+melt(df_atlanta, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_atlanta, skewness, function(x) skewness(x))
+
+melt(df_atlanta, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_atlanta %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+
+```
+
+## Input Statistics - Chicago
+```{r,eval=TRUE, message=FALSE,warning=FALSE, echo=F}
+missmap(df_chicago, main="Missing Values") 
+colSums(is.na(df_chicago))
+
+
+# Density plot to check normality
+melt(df_chicago, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_chicago, skewness, function(x) skewness(x))
+
+melt(df_chicago, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_chicago %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+```
+## Input Statistics - Los Angeles
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+missmap(df_la, main="Missing Values") 
+colSums(is.na(df_la))
+
+# Density plot to check normality
+melt(df_la, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_la, skewness, function(x) skewness(x))
+
+melt(df_la, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_la %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+```
+## Input Statistics - Seattle
+```{r, message=FALSE,warning=FALSE, echo=F}
+missmap(df_seattle, main="Missing Values") 
+colSums(is.na(df_seattle))
+
+
+# Density plot to check normality
+melt(df_seattle, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_seattle, skewness, function(x) skewness(x))
+
+melt(df_seattle, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_seattle %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+```
+## Input Statistics - San Francisco
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+missmap(df_sfo, main="Missing Values") 
+colSums(is.na(df_sfo))
+
+
+
+# Density plot to check normality
+melt(df_sfo, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_sfo, skewness, function(x) skewness(x))
+
+melt(df_sfo, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_sfo %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+```
+## Input Statistics - New York
+```{r, message=FALSE,warning=FALSE, echo=F}
+missmap(df_ny, main="Missing Values") 
+colSums(is.na(df_ny))
+
+# Density plot to check normality
+melt(df_ny, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=value))+geom_density(fill='gray')+facet_wrap(~variable, scales='free')+
+  labs(title="Density Plot for Normality and Skewness") + 
+  theme_classic()
+
+# Skewness and outliers
+#sapply(df_ny, skewness, function(x) skewness(x))
+
+melt(df_ny, id.vars='OffenseCode') %>% mutate(OffenseCode = as.factor(OffenseCode)) %>% 
+  ggplot(., aes(x=variable, y=value))+geom_boxplot(aes(fill=OffenseCode))+facet_wrap(~variable, dir='h',scales='free')+ labs(title="BoxPlot - Predictors Data Distribution with Target Variable")
+
+df_ny %>% 
+  cor(., use = "complete.obs") %>%
+  corrplot(., method = "color", type = "upper", tl.col = "black", tl.cex=.8, diag = FALSE)
+
+```
+
+
+
+## Prediction Models - Atlanta
+```{r, message=FALSE,warning=FALSE, echo=F}
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+
+train_x <- train[, -5]
+train_y <- train[,5]
+
+test_x <- test[, -5]
+test_y <- test[,5]
+
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model, data.frame(test_x))
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+
+train_x <- train[, -4]
+train_y <- train[,4]
+
+test_x <- test[, -4]
+test_y <- test[,4]
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+pred_y <- predict(model, test)
+vector_final <- as.character(pred_y)
+pred_y <- as.numeric(pred_y)
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+pred_y = predict(classifier, newdata = test_x)
+
+cm = table(test_y, pred_y)
+cm
+postResample(test_y, pred_y)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+mse = MSE(test$OffenseCode, round(pred))
+mae = MAE(test$OffenseCode, round(pred))
+rmse = RMSE(test$OffenseCode, round(pred))
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+indexes = createDataPartition(df_atlanta$OffenseCode, p = .85, list = F)
+train = df_atlanta[indexes, ]
+test = df_atlanta[-indexes, ]
+
+
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+atlanta_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+```
+## Prediction Models - Chicago
+```{r, message=FALSE,warning=FALSE, echo=F}
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+
+
+train_x <- train[, -4]
+train_y <- train[,4]
+
+test_x <- test[, -4]
+test_y <- test[,4]
+
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model, data.frame(test_x))
+
+
+mse = mean((test_y - pred_y)^2)
+mae = caret::MAE(test_y, pred_y)
+rmse = caret::RMSE(test_y, pred_y)
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+
+
+train_x <- train[, -4]
+train_y <- train[,4]
+
+test_x <- test[, -4]
+test_y <- test[,4]
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+pred_y <- predict(model, test)
+ 
+vector_final <- as.character(pred_y)
+pred_y <- as.numeric(pred_y)
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+y_pred = predict(classifier, newdata = test_x)
+
+cm = table(test_y, y_pred)
+cm
+postResample(test_y, y_pred)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+
+mse = MSE(test$OffenseCode, round(pred))
+mae = MAE(test$OffenseCode, round(pred))
+rmse = RMSE(test$OffenseCode, round(pred))
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+indexes = createDataPartition(df_chicago$OffenseCode, p = .85, list = F)
+train = df_chicago[indexes, ]
+test = df_chicago[-indexes, ]
+
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+
+mse = mean((test_y - pred_y)^2)
+mae = caret::MAE(test_y, pred_y)
+rmse = caret::RMSE(test_y, pred_y)
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+chicago_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+```
+## Prediction Models - Los Angeles
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+train_x <- train[, -6]
+train_y <- train[,6]
+
+test_x <- test[, -6]
+test_y <- test[,6]
+
+
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model.pruned, data.frame(test_x))
+
+
+mse = mean((test_y - pred_y)^2)
+mae = caret::MAE(test_y, pred_y)
+rmse = caret::RMSE(test_y, pred_y)
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+train_x <- train[, -6]
+train_y <- train[,6]
+
+test_x <- test[, -6]
+test_y <- test[,6]
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+
+mse = mean((test_y - pred_y)^2)
+mae = caret::MAE(test_y, pred_y)
+rmse = caret::RMSE(test_y, pred_y)
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+predictions <- predict(model, test)
+vector_final <- as.character(predictions)
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+train_x <- data.matrix(train[, -6])
+train_y <- train[,6]
+
+test_x <- data.matrix(test[, -6])
+test_y <- test[,6]
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+pred_y = predict(classifier, newdata = test_x)
+
+cm = table(test_y, pred_y)
+cm
+postResample(test_y, pred_y)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+mse = MSE(test$OffenseCode, pred)
+mae = MAE(test$OffenseCode, pred)
+rmse = RMSE(test$OffenseCode, pred)
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+indexes = createDataPartition(df_la$OffenseCode, p = .85, list = F)
+train = df_la[indexes, ]
+test = df_la[-indexes, ]
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+la_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+
+```
+## Prediction Models - Seattle
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+train_x <- train[, -4]
+train_y <- train[,4]
+
+test_x <- test[, -4]
+test_y <- test[,4]
+
+
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model, data.frame(test_x))
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+train_x <- train[, -4]
+train_y <- train[,4]
+
+test_x <- test[, -4]
+test_y <- test[,4]
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+pred_y <- predict(model, test)
+ 
+vector_final <- as.character(pred_y)
+pred_y <- as.numeric(pred_y)
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+y_pred = predict(classifier, newdata = test_x)
+
+cm = table(test_y, y_pred)
+cm
+postResample(test_y, y_pred)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+mse = MSE(test$OffenseCode, round(pred))
+mae = MAE(test$OffenseCode, round(pred))
+rmse = RMSE(test$OffenseCode, round(pred))
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+
+indexes = createDataPartition(df_seattle$OffenseCode, p = .85, list = F)
+train = df_seattle[indexes, ]
+test = df_seattle[-indexes, ]
+
+
+train_x <- data.matrix(train[, -4])
+train_y <- train[,4]
+
+test_x <- data.matrix(test[, -4])
+test_y <- test[,4]
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+seattle_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+
+
+```
+## Prediction Models - San Francisco
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+train_x <- train[, -5]
+train_y <- train[,5]
+
+test_x <- test[, -5]
+test_y <- test[,5]
+
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model, data.frame(test_x))
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+train_x <- train[, -5]
+train_y <- train[,5]
+
+test_x <- test[, -5]
+test_y <- test[,5]
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+pred_y <- predict(model, test)
+ 
+vector_final <- as.character(pred_y)
+pred_y <- as.numeric(pred_y)
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+train_x <- data.matrix(train[, -5])
+train_y <- train[,5]
+
+test_x <- data.matrix(test[, -5])
+test_y <- test[,5]
+
+
+
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+y_pred = predict(classifier, newdata = test_x)
+
+cm = table(test_y, y_pred)
+cm
+postResample(test_y, y_pred)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+mse = MSE(test$OffenseCode, round(pred))
+mae = MAE(test$OffenseCode, round(pred))
+rmse = RMSE(test$OffenseCode, round(pred))
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+indexes = createDataPartition(df_sfo$OffenseCode, p = .85, list = F)
+train = df_sfo[indexes, ]
+test = df_sfo[-indexes, ]
+
+train_x <- data.matrix(train[, -5])
+train_y <- train[,5]
+
+test_x <- data.matrix(test[, -5])
+test_y <- test[,5]
+
+
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+sfo_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+
+```
+## Prediction Models - New York
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+train_x <- train[, -6]
+train_y <- train[,6]
+
+test_x <- test[, -6]
+test_y <- test[,6]
+
+dt_model<-rpart(train_y~., data = data.frame(train_x,train_y), control = rpart.control(cp = 0.00001))
+
+
+
+dt_model.pruned = prune(dt_model, cp = 0.0001)
+
+plot(dt_model.pruned)
+
+text(dt_model.pruned, cex = 0.9, xpd = TRUE)
+
+pred_y = predict(dt_model, data.frame(test_x))
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+x = 1:length(test_y)
+
+plot(x, test_y, col = "red", type = "l", lwd=2,
+     main = "Boston housing test data prediction")
+lines(x, pred_y, col = "blue", lwd=2)
+legend("topright",  legend = c("original-medv", "predicted-medv"), 
+       fill = c("red", "blue"), col = 2:3,  adj = c(0, 0.6))
+grid()
+
+
+dt_list <- data.frame('Decision Tree',mae,mse,rmse)
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+train_x <- train[, -6]
+train_y <- train[,6]
+
+test_x <- test[, -6]
+test_y <- test[,6]
+
+
+
+knnmodel = knnreg(train_x, train_y)
+
+str(knnmodel)
+
+pred_y = predict(knnmodel, data.frame(test_x))
+
+
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+
+knn_list <- data.frame('KNN',mae,mse,rmse)
+
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+
+
+model <-  naiveBayes(OffenseCode ~ ., data = train)
+pred_y <- predict(model, test)
+ 
+vector_final <- as.character(pred_y)
+pred_y <- as.numeric(pred_y)
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+nb_list <- data.frame('Naive Bayes',mae,mse,rmse)
+
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+train_x <- data.matrix(train[, -6])
+train_y <- train[,6]
+
+test_x <- data.matrix(test[, -6])
+test_y <- test[,6]
+
+
+classifier = randomForest(x = train_x,y = train_y,ntree = 500, random_state = 0)
+
+y_pred = predict(classifier, newdata = test_x)
+
+cm = table(test_y, y_pred)
+cm
+postResample(test_y, y_pred)
+varImpPlot(classifier)
+
+mtry = sqrt(30)
+
+importance = importance(classifier)
+importance
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+rf_list <- data.frame('Random Forest',mae,mse,rmse)
+
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+model_reg = svm(OffenseCode~., data=train)
+
+
+pred = predict(model_reg, test)
+
+x = 1:length(test$OffenseCode)
+plot(x, test$OffenseCode, pch=18, col="red")
+lines(x, pred, lwd="1", col="blue")
+
+mse = MSE(test$OffenseCode, round(pred))
+mae = MAE(test$OffenseCode, round(pred))
+rmse = RMSE(test$OffenseCode, round(pred))
+r2 = R2(test$OffenseCode, pred, form = "traditional")
+
+cat(" MAE:", mae, "\n", "MSE:", mse, "\n", 
+    "RMSE:", rmse, "\n", "R-squared:", r2)
+
+
+svm_list <- data.frame('SVM',mae,mse,rmse)
+
+indexes = createDataPartition(df_ny$OffenseCode, p = .85, list = F)
+train = df_ny[indexes, ]
+test = df_ny[-indexes, ]
+
+train_x <- data.matrix(train[, -6])
+train_y <- train[,6]
+
+test_x <- data.matrix(test[, -6])
+test_y <- test[,6]
+
+
+xgb_train = xgb.DMatrix(data = train_x, label = train_y)
+xgb_test = xgb.DMatrix(data = test_x, label = test_y)
+
+xgbc = xgboost(data = xgb_train, max.depth = 2, nrounds = 50)
+
+pred_y = predict(xgbc, xgb_test)
+
+
+mse = mean((test_y - round(pred_y))^2)
+mae = caret::MAE(test_y, round(pred_y))
+rmse = caret::RMSE(test_y, round(pred_y))
+
+
+cat("MSE: ", mse, "MAE: ", mae, " RMSE: ", rmse)
+
+xg_list <- data.frame('xGBoost',mae,mse,rmse)
+
+colnames(dt_list)[1] <- "Model_Name"
+colnames(knn_list)[1] <- "Model_Name"
+colnames(nb_list)[1] <- "Model_Name"
+colnames(rf_list)[1] <- "Model_Name"
+colnames(svm_list)[1] <- "Model_Name"
+colnames(xg_list)[1] <- "Model_Name"
+ny_metrics <- rbind(dt_list,knn_list,nb_list,rf_list,svm_list,xg_list)
+
+```
+
+## Model Performance
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+
+atlanta_metrics$City <- 'Atlanta'
+seattle_metrics$City <- 'Seattle'
+sfo_metrics$City <- 'San Francisco'
+ny_metrics$City <- 'New York'
+la_metrics$City <- 'Los Angeles'
+chicago_metrics$City <- 'Chicago'
+
+Model_Metrics <- rbind(atlanta_metrics,seattle_metrics,sfo_metrics,ny_metrics,la_metrics,chicago_metrics)
+
+
+
+```
+
+
+## ARIMA Model Forecasting - Atlanta
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+library(dplyr)
+
+df_atlanta <- read.csv(file = 'datasets/Atlanta/atlanta_final.csv')
+df_atlanta_summary<-df_atlanta %>%
+  group_by(Rpt_year) %>%
+  summarise(n=n()) 
+
+#convert to time series
+tsData <- ts(df_atlanta_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Atlanta Crimes") 
+
+```
+## ARIMA Model Forecasting - Chicago
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+
+#import data
+df_chicago <- read.csv(file = 'datasets/Chicago/chicago_final.csv')
+date = strptime(df_chicago$Date,"%m/%d/%Y %H:%M:%S")
+df_chicago["Year"] <- as.numeric(paste( format(date,"%Y")))
+
+df_chicago_summary<-df_chicago %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+#convert to time series
+tsData <- ts(df_chicago_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Chicago Crimes") 
+
+```
+## ARIMA Model Forecasting - Los Angeles
+```{r, message=FALSE,warning=FALSE, echo=F}
+
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+
+#import data
+df_la <- read.csv(file = 'datasets/Los Angeles/la_final.csv')
+date = strptime(df_la$Date.Rptd,"%m/%d/%Y %H:%M:%S")
+df_la["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_la_summary<-df_la %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+#convert to time series
+tsData <- ts(df_la_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Chicago Crimes") 
+
+
+```
+## ARIMA Model Forecasting - Seattle
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+
+#import data
+df_seattle <- read.csv(file = 'datasets/Seattle/seattle_final.csv')
+date = strptime(df_seattle$Report.DateTime,"%m/%d/%Y %H:%M:%S")
+df_seattle["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_seattle_summary<-df_seattle %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+
+#convert to time series
+tsData <- ts(df_seattle_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Chicago Crimes") 
+
+```
+## ARIMA Model Forecasting - San Francisco
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+
+#import data
+df_sfo <- read.csv(file = 'datasets/San Francisco/2009.csv')
+date = strptime(df_sfo$Date,"%m/%d/%Y")
+df_sfo["Year"] <- as.numeric(paste( format(date,"%Y")))
+
+df_sfo_summary<-df_sfo %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+
+#convert to time series
+tsData <- ts(df_sfo_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(2,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Chicago Crimes") 
+
+```
+## ARIMA Model Forecasting - New York
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+
+#import data
+df_ny <- read.csv(file = 'datasets/New York/ny_final.csv')
+date = strptime(df_ny$CMPLNT_FR_DT,"%m/%d/%Y")
+df_ny["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_ny_summary<-df_ny %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+
+#convert to time series
+tsData <- ts(df_ny_summary[2],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for Chicago Crimes") 
+
+```
+
+## Overall USA Crime
+```{r, message=FALSE,warning=FALSE, echo=F}
+#Load Libraries
+library("fUnitRoots")
+library(ggplot2)
+library(zoo)
+library(lmtest)
+library("forecast")
+library(FitAR)
+library(tidyverse)
+library(dplyr)
+#import data
+df_seattle <- read.csv(file = 'datasets/Seattle/seattle_final.csv')
+date = strptime(df_seattle$Report.DateTime,"%m/%d/%Y %H:%M:%S")
+df_seattle["Year"] <- as.numeric(paste( format(date,"%Y")))
+df_seattle_summary<-df_seattle %>%
+  group_by(Year) %>%
+  summarise(n=n()) 
+
+df_atlanta_summary$Year <- df_atlanta_summary$Rpt_year
+df_atlanta_summary<-within(df_atlanta_summary,rm(Rpt_year))
+df_us_summary <- rbind(df_atlanta_summary,df_chicago_summary,df_seattle_summary,df_sfo_summary,df_ny_summary,df_la_summary)
+
+df_us_summary_cnt<-df_us_summary %>%
+  dplyr::filter(Year>=2000) %>%
+  group_by(Year) %>%
+  summarise(n=sum(n)) 
+
+  #convert to time series
+tsData <- ts(df_us_summary[1],start=2009,end=2020, frequency = 1)
+plot(tsData)
+
+#detemine stationarity of data
+urkpssTest(tsData, type = c("tau"), lags = c("short"),use.lag = NULL, doplot = TRUE)
+tsstationary<-diff(tsData, differences=1)
+plot(tsstationary)
+acf(tsData,lag.max=34)
+
+#fit the model
+fitARIMA<-arima(tsData, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+fitARIMA
+#significance of coefficients
+coeftest(fitARIMA)
+par(mfrow=c(1,1))
+acf(fitARIMA$residuals)
+
+par(mfrow=c(2,1))
+
+qqnorm(fitARIMA$residuals)
+qqline(fitARIMA$residuals)
+
+auto.arima(tsData, trace=TRUE)
+
+#forcast future values
+par(mfrow=c(1,1))
+predict(fitARIMA,n.ahead = 5)
+futurVal <- forecast(fitARIMA,h=5)
+plot(futurVal,xlab="Year",ylab="Number of Crimes",main="ARIMA Forecast for USA Crimes",ylim = c(10000, 400000)) 
+
+```
